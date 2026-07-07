@@ -14,6 +14,33 @@ a simulator instead of real hardware.
 
 ---
 
+## Quick setup (automated)
+
+Clone the repo, then run the script for your platform. Each script installs Python + Git (if
+missing), creates a `.venv`, and installs `nimbusos-sdk` + `pyzmq`. Both are idempotent.
+
+**Windows on ARM (ARM64):**
+```powershell
+git clone https://github.com/jasonjgeiger/nimbus-flightsim-lab.git
+cd nimbus-flightsim-lab
+pwsh -ExecutionPolicy Bypass -File .\scripts\setup-windows-arm.ps1
+.\.venv\Scripts\Activate.ps1
+```
+
+**macOS (Apple Silicon or Intel):**
+```bash
+git clone https://github.com/jasonjgeiger/nimbus-flightsim-lab.git
+cd nimbus-flightsim-lab
+chmod +x scripts/setup-macos.sh
+./scripts/setup-macos.sh
+source .venv/bin/activate
+```
+
+After activation, jump to **Section 8** for the day-one workflow. For manual setup, see
+**Section 4**.
+
+---
+
 ## 1. How Nimbus actually works (the mental model)
 
 Understanding the architecture is what makes simulation possible.

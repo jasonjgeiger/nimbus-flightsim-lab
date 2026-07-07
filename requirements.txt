@@ -1,0 +1,4 @@
+# NimbusOS flight-sim lab dependencies
+# Python >=3.10,<4.0 required by nimbusos-sdk.
+nimbusos-sdk
+pyzmq
