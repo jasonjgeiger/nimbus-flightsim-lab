@@ -11,6 +11,7 @@
 #   ./run.sh tier1                 # Tier 1 sink  + agent_smoke.py
 #   ./run.sh tier2 agents/orbit_agent.py
 #   ./run.sh tier3                 # Betaflight SITL bridge + agents/orbit_agent.py
+#   ./run.sh tier3 agents/fly_mission.py   # fly a Mission IR file (see mission/)
 #
 set -euo pipefail
 
@@ -20,6 +21,10 @@ cd "$SCRIPT_DIR"
 TIER="${1:-tier2}"
 export DF_ZMQ_PUB_ENDPOINT="${DF_ZMQ_PUB_ENDPOINT:-tcp://127.0.0.1:7771}"
 export DF_ZMQ_SUB_ENDPOINT="${DF_ZMQ_SUB_ENDPOINT:-tcp://127.0.0.1:7772}"
+
+# Put the repo root on PYTHONPATH so agents can import local packages
+# (e.g. `mission`) regardless of the script's own directory.
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 # Pick the venv python if present, else fall back to python3.
 PY="python3"
