@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "name": "forward 20ft, up 100ft, hover",
+  "units_in": "imperial",
+  "defaults": { "speed_mps": 0.35, "threshold_m": 0.15, "hold_time_s": 0.5 },
+  "safety": { "max_altitude_m": 40.0, "geofence_radius_m": 50.0, "max_speed_mps": 0.75 },
+  "steps": [
+    { "op": "arm" },
+    { "op": "set_speed", "speed": 1.15 },
+    { "op": "takeoff" },
+    { "op": "goto_relative", "forward": 20, "hold": 0.5 },
+    { "op": "climb", "up": 100 },
+    { "op": "hover", "seconds": 10 },
+    { "op": "land" },
+    { "op": "disarm" }
+  ]
+}

@@ -66,13 +66,48 @@ Then follow the tutorial from
 **[Set up your system](https://jasonjgeiger.github.io/nimbus-flightsim-lab/setup.html)**
 onward.
 
+## Natural-language mission control (web app)
+
+Type a mission in plain English — *"fly forward 20 ft, then go up 100 ft and hover"* — review
+the compiled plan, then fly it against whatever "world" is running (the Tier 2 mock, the Tier 3
+Betaflight SITL bridge, or, eventually, a real NimbusOS drone).
+
+```
+English  ──▶  Mission IR (strict JSON)  ──▶  validate (units + safety caps)  ──▶  executor  ──▶  ZMQ world
+```
+
+**The web app *is* the agent** — switching sim ↔ real drone is just an endpoint swap. The
+natural-language layer sits *outside* the safety boundary: every mission is dead-reckoned
+against altitude / geofence / speed caps *before* a single command is published.
+
+```bash
+source .venv/bin/activate
+python mock_nimbus.py        # start a world (Tier 2 mock), OR: python tier3/bridge.py
+python -m uvicorn webui.app:app --host 127.0.0.1 --port 8000   # in another terminal
+# open http://127.0.0.1:8000
+```
+
+See **[`webui/README.md`](webui/README.md)** for the full flow, HTTP/WebSocket API, and NL
+backends (offline rule-based default, or an OpenAI-compatible LLM), and
+**[`docs/mission-control/`](docs/mission-control/)** for the design and IR schema.
+
 ## What's in this repo
 
 - **`docs/`** — the tutorial site (Jekyll + [Just the Docs](https://just-the-docs.com/)); the
   source for the Pages URL above. See [`docs/README.md`](docs/README.md) to preview or publish
   it locally.
+- **`mission/`** — the Mission IR compiler, validator, and deterministic executor, plus a CLI
+  (`python -m mission …`) and standalone tests (`python -m mission.selftest`). See
+  [`mission/README.md`](mission/README.md).
+- **`webui/`** — the FastAPI natural-language mission-control web app. See
+  [`webui/README.md`](webui/README.md).
+- **`tier3/`** — the Betaflight SITL bridge (real firmware in the loop). See
+  [`tier3/README.md`](tier3/README.md).
+- **`agents/`**, **`mock_nimbus.py`**, **`sink.py`**, **`run.sh`** — Tier 1/2 worlds, example
+  agents, and the launcher used throughout the tutorial.
 - **`scripts/`** — idempotent setup scripts for macOS and Windows on ARM.
-- **`requirements.txt`** — Python dependencies (`nimbusos-sdk`, `pyzmq`).
+- **`requirements.txt`** — Python dependencies (`nimbusos-sdk`, `pyzmq`, `jsonschema`,
+  `fastapi`, `uvicorn`).
 
 ## License / attribution
 

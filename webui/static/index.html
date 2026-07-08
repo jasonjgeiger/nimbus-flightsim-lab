@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nimbus Mission Control</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Nimbus Mission Control</h1>
+    <span id="health" class="pill">…</span>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>1 · Describe the mission</h2>
+      <textarea id="prompt" rows="3"
+        placeholder="e.g. Fly forward 20 ft, then go up 100 ft and hover."></textarea>
+      <div class="row">
+        <button id="compile">Compile → Mission IR</button>
+        <span id="compileMsg" class="msg"></span>
+      </div>
+      <details class="examples">
+        <summary>Examples</summary>
+        <ul>
+          <li><a href="#" class="ex">Fly forward 20 ft, then go up 100 ft and hover.</a></li>
+          <li><a href="#" class="ex">take off, fly forward 5 meters, turn right 90 degrees, go up 3 m, hover for 5 seconds, then land</a></li>
+          <li><a href="#" class="ex">fly forward 10 ft, hover for 3 seconds, turn left 90 degrees, fly forward 10 ft, then return</a></li>
+        </ul>
+      </details>
+    </section>
+
+    <section class="panel">
+      <h2>2 · Review &amp; confirm</h2>
+      <div class="split">
+        <div>
+          <label>Mission IR (editable)</label>
+          <textarea id="ir" rows="16" spellcheck="false"></textarea>
+          <div class="row">
+            <button id="revalidate">Re-validate</button>
+            <span id="valid" class="msg"></span>
+          </div>
+        </div>
+        <div>
+          <label>Preview</label>
+          <pre id="preview" class="preview">—</pre>
+        </div>
+      </div>
+      <div class="row confirm">
+        <button id="fly" disabled class="danger">Confirm &amp; Fly ▶</button>
+        <span class="hint">Point at a running backend first (mock or Betaflight bridge).</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>3 · Flight log</h2>
+      <pre id="log" class="log">—</pre>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
