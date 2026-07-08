@@ -346,6 +346,101 @@ hold/threshold behavior), reproducible and fast, on Windows/macOS/Linux with onl
 
 ## 7. Tier 3 — Bridge to a real flight simulator (high fidelity)
 
+> **Built & working:** this repo ships a complete Tier 3 bridge for **Betaflight SITL**
+> in [`tier3/`](tier3/) — run it with `./run.sh tier3`. It arms, takes off, holds
+> altitude, and tracks horizontal waypoints with the real Betaflight firmware (PIDs +
+> QUADX mixer) in the loop. See [`tier3/README.md`](tier3/README.md) for how to run it,
+> the required build flag (`ENABLE_GAZEBO_BRIDGE=0`), frame/sign conventions, and the
+> arming/lock-step gotchas. The rest of this section is the design rationale behind it.
+
+### 7.1 Run it — step by step (command order)
+
+Everything runs locally on macOS. Do these in order from the repo root.
+
+**One-time: build the Betaflight SITL firmware.** The `OPTIONS` flag is mandatory
+(a bare `make TARGET=SITL` turns the Gazebo bridge on, which rotates the attitude
+frame 90° and makes the quad diverge):
+
+```bash
+cd .betaflight
+make TARGET=SITL OPTIONS="ENABLE_GAZEBO_BRIDGE=0"   # ~30 s clean, ~7 s incremental
+cd ..
+# produces .betaflight/obj/main/betaflight_SITL.elf
+```
+
+**Every run: fly the full mission.** One command starts and supervises everything —
+it boots Betaflight, one-time-configures it (arm + angle mode over the CLI), waits for
+a readiness handshake, then launches the orbit agent:
+
+```bash
+source .venv/bin/activate         # if not already active
+./run.sh tier3                    # bridge + agents/orbit_agent.py
+./run.sh tier3 agents/your.py     # or a different agent
+```
+
+**What healthy output looks like** — the quad arms, takes off, flies a 1 m square
+(4 legs, 90° yaw turn between each), lands, and disarms:
+
+```
+==> Waiting for Betaflight bridge to become ready ...
+[bridge] configuration saved to eeprom.bin
+[bridge] READY (Betaflight armable; agent may connect).
+[orbit] leg 1/4 -> forward=1.0 right=0.0
+[orbit]   reached (distance=0.13 m)
+ ... legs 2-4 ...
+[orbit] done: landed and disarmed.
+```
+
+Stop anytime with `Ctrl-C`; the bridge tears Betaflight down on exit.
+
+**Run the bridge and agent in separate terminals** (useful while iterating on an agent):
+
+```bash
+# terminal A — the world (bridge + Betaflight). Wait for "[bridge] READY".
+.venv/bin/python tier3/bridge.py
+# terminal B — any agent, once A is ready
+.venv/bin/python agents/orbit_agent.py
+```
+
+### 7.2 Watch it live in the Betaflight App (Chrome)
+
+You can open the Betaflight App and watch attitude / receiver channels / motors while
+the bridge flies. On current macOS there is **no native desktop Betaflight app** — it's
+a browser PWA at [app.betaflight.com](https://app.betaflight.com), and its SITL
+connection is a **WebSocket**, while SITL only speaks **raw TCP** on port 5761. Bridge
+that gap with the included proxy:
+
+```bash
+# with SITL already running (./run.sh tier3, or the .elf directly):
+.venv/bin/python tier3/sitl_ws_proxy.py     # ws://localhost:5762  ->  tcp 127.0.0.1:5761
+```
+
+Then, in **Chrome or Edge** (not Safari) at app.betaflight.com:
+
+1. Open **Options** (gear icon) and turn on **manual connection mode**. Without this the
+   only choices are USB/Bluetooth/DFU and **Connect does nothing** for SITL.
+2. In the port dropdown choose **Manual**, type `ws://localhost:5762`, click **Connect**.
+3. The **Setup** tab shows live attitude; the **Receiver** tab shows the RC channels
+   moving as the agent flies.
+
+The proxy uses the CLI/MSP port (5761) while the bridge flies over UDP (9002–9004), so
+you can run `./run.sh tier3` and the App/proxy together. Start the App/proxy **after**
+you see `[bridge] READY` — during the one-time config phase Betaflight restarts and
+5761 briefly drops (the proxy retries for ~5 s to smooth this over).
+
+### 7.3 Troubleshooting
+
+| Symptom | Cause & fix |
+| ------- | ----------- |
+| `bind port 5761 failed` / SITL won't start | A stale Betaflight is still running. `pgrep -fl betaflight_SITL`, then kill the PID. |
+| Proxy: `cannot reach SITL at 127.0.0.1:5761` | SITL isn't up yet (or mid-restart). Wait for `[bridge] READY`, then Connect again. |
+| App only offers USB/Bluetooth/DFU | Manual connection mode isn't enabled (Options → enable it), or you used Safari. |
+| Quad diverges / climbs away | Firmware built without `ENABLE_GAZEBO_BRIDGE=0`. Rebuild with the flag, then re-run the bridge so it re-persists its config. |
+| No output from bridge/agent | Python buffers to pipes; prefix with `PYTHONUNBUFFERED=1` to see logs live. |
+
+For frame/sign conventions, the lock-step timing, and the arming sequence in depth, see
+[`tier3/README.md`](tier3/README.md).
+
 For realistic dynamics, sensors, and camera frames, run an established SITL simulator and write
 a **bridge** that maps sim ↔ Nimbus topics. The bridge replaces the "point-mass" core of Tier 2
 with a physics engine.
@@ -416,7 +511,7 @@ nimbusos-subscribe --help
 Open a dedicated terminal and leave it running for the whole session.
 
 - **Tier 2 (sim):** `python mock_nimbus.py`  → binds `7771` (commands in) and `7772` (state out).
-- **Tier 3 (real sim):** start Betaflight SITL / PX4+Gazebo / AirSim, then start your bridge.
+- **Tier 3 (real sim):** `./run.sh tier3` starts the Betaflight SITL bridge (see [`tier3/README.md`](tier3/README.md)); it launches the agent for you once the bridge is ready.
 - **Tier 1 (no feedback):** `python sink.py` (Section 5) to observe commands only.
 
 > Point the SDK at it (once per shell):

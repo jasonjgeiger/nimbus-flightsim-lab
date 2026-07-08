@@ -2,3 +2,6 @@
 # Python >=3.10,<4.0 required by nimbusos-sdk.
 nimbusos-sdk
 pyzmq
+# Tier 3 only: TCP->WebSocket proxy so the Betaflight web App (Chrome) can reach
+# SITL. See tier3/sitl_ws_proxy.py.
+websockets

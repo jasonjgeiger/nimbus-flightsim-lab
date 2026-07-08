@@ -1,0 +1,15 @@
+# Python virtual environment (created by scripts/setup-*)
+.venv/
+
+# Betaflight SITL clone + build (Tier 3)
+.betaflight/
+eeprom.bin
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# OS cruft
+.DS_Store
