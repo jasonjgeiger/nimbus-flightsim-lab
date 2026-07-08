@@ -7,3 +7,6 @@ pyzmq
 websockets
 # Mission Control: validate Mission IR against docs/mission-control/mission-ir.schema.json.
 jsonschema
+# Mission Control web app (webui/): natural-language mission UI + executor API.
+fastapi
+uvicorn[standard]
