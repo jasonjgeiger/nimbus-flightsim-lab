@@ -20,40 +20,119 @@ disarms — the shape every Nimbus agent shares.
 
 ---
 
-Run this **after setup is done**. It assumes Tier 2 for a real closed loop; on Tier 1, skip
-the mock and just watch commands on the raw sink.
+Run this **after setup is done**. There are two ways to run your first agent, and two "worlds"
+either can fly against:
+
+- **Ways to run:** **A) the natural-language web app** (no code — type a mission in the browser)
+  or **B) a Python agent** you write yourself.
+- **Worlds:** the **Tier 2 mock** (instant, pure-Python) or **Tier 3 Betaflight SITL** (real
+  firmware in the loop). Your agent doesn't change between them — only what's behind the ZMQ
+  endpoints does.
+
+Start with **A on Tier 2** — it's the fastest way to see a full flight.
 
 ## Project layout
 
 ```
-nimbus-lab/
-├─ mock_nimbus.py     # Tier 2 simulator — or skip on Tier 1
-├─ agents/
-│  └─ orbit_agent.py  # your first agent
+nimbus-flightsim-lab/
+├─ mock_nimbus.py     # Tier 2 world (kinematic sim) — binds 7771/7772
+├─ tier3/bridge.py    # Tier 3 world (Betaflight SITL bridge)
+├─ webui/             # the natural-language mission-control web app
+├─ mission/           # Mission IR compiler + validator + executor (used by the web app & CLI)
+├─ agents/            # example hand-written agents (e.g. orbit_agent.py)
 └─ sink.py            # Tier 1 raw command observer (optional)
 ```
 
-## Step 0 — Sanity check the toolchain (once)
-
-```bash
-python -c "from nimbusos_sdk import NimbusClient; print('SDK OK')"
-nimbusos-subscribe --help
-```
-
-## Step 1 — Start the "world"
+## Step 1 — Start a "world" (pick one)
 
 Open a dedicated terminal and leave it running for the whole session.
 
-- **Tier 2 (sim):** `python mock_nimbus.py` → binds `7771` (commands in) and `7772` (state out).
-- **Tier 1 (no feedback):** `python sink.py` to observe commands only.
-
-Point the SDK at it (once per shell):
+**Tier 2 — kinematic mock (simplest, no build):**
 ```bash
-export DF_ZMQ_PUB_ENDPOINT=tcp://127.0.0.1:7771
-export DF_ZMQ_SUB_ENDPOINT=tcp://127.0.0.1:7772
+source .venv/bin/activate
+python mock_nimbus.py           # binds 7771 (commands in) and 7772 (state out)
 ```
 
-## Step 2 — Verify the link before writing agent logic
+**Tier 3 — real Betaflight firmware:** see **[Connect Betaflight](#connect-betaflight)** below,
+then come back. Everything after Step 1 is identical for both worlds.
+
+## Step 2 — Fly a mission from the browser (no code)
+
+The web app *is* the agent. Start it in a **second terminal**:
+
+```bash
+source .venv/bin/activate
+python -m uvicorn webui.app:app --host 127.0.0.1 --port 8000
+```
+
+Then open **[http://127.0.0.1:8000](http://127.0.0.1:8000)** and:
+
+1. Type a mission, e.g. `Fly forward 20 ft, then go up 100 ft and hover.`
+2. Click **Compile** → review the compiled plan (editable JSON + a plain-English preview).
+   Invalid or unsafe missions are rejected with a reason *before* anything flies.
+3. Click **Confirm & Fly** → watch the live per-leg log: `arm → takeoff → legs → land → disarm`.
+
+That's your first agent flying. More phrasings to try:
+
+- `Take off, fly forward 10 ft, fly right 10 ft, then land`
+- `Fly up 50 ft, turn right 90 degrees, then hover for 5 seconds`
+
+{: .note }
+> Prefer the command line? Fly the same mission with no browser:
+> `python -m mission mission/examples/forward_up_hover.json --yes`
+> (add `--dry-run` to validate + preview without flying). See
+> [`webui/README.md`](https://github.com/jasonjgeiger/nimbus-flightsim-lab/blob/main/webui/README.md).
+
+<a name="connect-betaflight"></a>
+
+## Connect Betaflight (Tier 3 — real firmware)
+
+Same browser flow as above, but flying against real Betaflight SITL instead of the mock.
+
+**One-time — build the SITL firmware.** The `OPTIONS` flag is **required** (a bare
+`make TARGET=SITL` turns on the Gazebo bridge, which rotates the frame 90° and makes the quad
+diverge):
+
+```bash
+cd .betaflight
+make TARGET=SITL OPTIONS="ENABLE_GAZEBO_BRIDGE=0"   # ~30 s clean, ~7 s incremental
+cd ..
+```
+
+**Each run — start the bridge instead of the mock** (this replaces Step 1):
+
+```bash
+source .venv/bin/activate
+python tier3/bridge.py
+```
+
+Wait for this line before flying:
+
+```
+[bridge] READY (Betaflight armable; agent may connect).
+```
+
+The bridge boots Betaflight, configures it once (arm + angle mode over the CLI), and serves the
+**same** `7771`/`7772` endpoints. Now do **Step 2** (start the web app, open the browser) exactly
+as before — nothing else changes.
+
+**Troubleshooting:**
+
+- *Port `5761` already in use / bridge won't start* — a previous Betaflight SITL is still
+  running; stop it, then re-run the bridge.
+- *Stuck before `READY`* — Betaflight can be slow to become armable on first boot; give it up to
+  ~30 s. If it never arrives, stop and restart the bridge.
+- *Want to watch it fly in the Betaflight Configurator?* See
+  [Tier 3 — Flight simulator](./tier3-flight-simulator.html).
+
+---
+
+## B. Write your own agent (optional, code)
+
+Prefer code to the browser? Build the classic loop yourself. Keep a **world from Step 1**
+running (mock or Betaflight bridge), then:
+
+### B1 — Verify the link before writing agent logic
 
 In a second terminal, confirm state is actually flowing:
 ```bash
@@ -64,7 +143,7 @@ If nothing arrives: check the endpoints, that the sim bound the sockets, and —
 helpers — that your sim emits schema-accurate FlatBuffers. Otherwise use raw
 `client.subscribe_*` subscriptions.
 
-## Step 3 — Write the first agent
+### B2 — Write the agent
 
 Start from a known-good shape: **arm → takeoff → sense/act loop → land → disarm**.
 
@@ -107,7 +186,7 @@ if __name__ == "__main__":
 > (arming, takeoff, waypoints, landing) and
 > [Publishing](https://droneforge.gitbook.io/droneforge-docs/nimbusos-sdk/python-api/publishing).
 
-## Step 4 — Run and watch
+### B3 — Run and watch
 
 ```bash
 python agents/orbit_agent.py
@@ -118,7 +197,7 @@ Watch three things at once (three terminals):
 2. `nimbusos-subscribe selected_state --timeout 30` — confirms the position moves as commanded.
 3. Agent stdout — confirms your control flow and waypoint-reached logic.
 
-## Step 5 — Close the loop with perception (optional)
+### B4 — Close the loop with perception (optional)
 
 Add a sense step so the agent reacts instead of flying blind — pull a camera frame, run
 *your* detector, draw an overlay, and steer:
@@ -138,22 +217,25 @@ for frame in client.latest_camera_frames(timeout_sec=1.0):
 
 (For overlays/vision you need a real camera stream — a Tier 3 sim like AirSim, or hardware.)
 
-## Step 6 — Iterate
+### B5 — Iterate
 
-Edit the agent, re-run Step 4. Because the sim is stateful, restart `mock_nimbus.py` between
-runs for a clean start. Tighten `threshold_m`, tune speeds, add branches (e.g. abort on low
-`telemetry.battery.voltage`), then graduate the same agent to Tier 3 and finally real
-hardware — changing only what's behind the ZMQ endpoints.
+Edit the agent, re-run **B3**. Because the sim is stateful, restart your world
+(`mock_nimbus.py` or `tier3/bridge.py`) between runs for a clean start. Tighten `threshold_m`,
+tune speeds, add branches (e.g. abort on low `telemetry.battery.voltage`), then graduate the
+same agent to Tier 3 and finally real hardware — changing only what's behind the ZMQ endpoints.
 
 ## Definition of done
 
-- Arms, takes off, completes all legs with `waypoint_status.reached && held`, lands, disarms.
-- No `ValueError` from argument validation (speeds in range, valid request/mode).
-- Runs identically after a sim restart (deterministic, hardware-free).
+- A mission flies end-to-end: **arm → takeoff → legs → land → disarm**, either from the web app
+  (A) or your own agent (B), against the mock **or** Betaflight SITL.
+- Legs complete on `waypoint_status.reached && held`; no `ValueError` from argument validation
+  (speeds in range, valid request/mode).
+- Runs identically after a world restart (deterministic, hardware-free).
 
 ---
 
-**Checkpoint:** your agent completes the full arm → fly → land → disarm cycle against the
-Tier 2 mock, and you've watched the position track each commanded leg.
+**Checkpoint:** a mission completes the full arm → fly → land → disarm cycle — typed into the
+web app (or flown by your own agent) — against the Tier 2 mock or Betaflight SITL, and you've
+watched each leg track as commanded.
 
 Next → [Transition to Nimbus hardware](./to-hardware.html)
