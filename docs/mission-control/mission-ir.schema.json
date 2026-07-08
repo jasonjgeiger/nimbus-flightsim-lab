@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jasonjgeiger/nimbus-flightsim-lab/docs/mission-control/mission-ir.schema.json",
+  "title": "Nimbus Mission IR",
+  "description": "Strict intermediate representation compiled from natural language and executed by the deterministic mission executor. See mission-ir.md and architecture.md. Note: this schema validates STRUCTURE. Semantic rules (unit conversion, safety caps, and rejection of reserved perception ops in v1) are enforced by the validator in code, not here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "steps"],
+  "properties": {
+    "version": { "const": 1 },
+    "name": { "type": "string", "maxLength": 200 },
+    "units_in": { "enum": ["imperial", "si"], "default": "imperial" },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "speed_mps": { "type": "number", "exclusiveMinimum": 0 },
+        "threshold_m": { "type": "number", "exclusiveMinimum": 0 },
+        "hold_time_s": { "type": "number", "minimum": 0 }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_altitude_m": { "type": "number", "exclusiveMinimum": 0 },
+        "geofence_radius_m": { "type": "number", "exclusiveMinimum": 0 },
+        "max_speed_mps": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.75 }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/step" }
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "required": ["op"],
+      "properties": {
+        "op": {
+          "enum": [
+            "arm", "disarm", "set_speed", "takeoff", "land",
+            "goto_relative", "climb", "yaw_turn", "hover", "return_to_start",
+            "goto_target", "hover_in_front_of", "goto_top_of"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "op": { "const": "set_speed" } } },
+          "then": {
+            "required": ["speed"],
+            "additionalProperties": false,
+            "properties": { "op": {}, "speed": { "type": "number", "exclusiveMinimum": 0 } }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "enum": ["arm", "disarm", "takeoff", "land"] } } },
+          "then": { "additionalProperties": false, "properties": { "op": {} } }
+        },
+        {
+          "if": { "properties": { "op": { "const": "goto_relative" } } },
+          "then": {
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "forward": { "type": "number" },
+              "right": { "type": "number" },
+              "up": { "type": "number" },
+              "down": { "type": "number" },
+              "speed": { "type": "number", "exclusiveMinimum": 0 },
+              "threshold": { "type": "number", "exclusiveMinimum": 0 },
+              "hold": { "type": "number", "minimum": 0 }
+            },
+            "not": { "required": ["up", "down"] }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "climb" } } },
+          "then": {
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "up": { "type": "number" },
+              "down": { "type": "number" },
+              "speed": { "type": "number", "exclusiveMinimum": 0 },
+              "hold": { "type": "number", "minimum": 0 }
+            },
+            "not": { "required": ["up", "down"] },
+            "anyOf": [ { "required": ["up"] }, { "required": ["down"] } ]
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "yaw_turn" } } },
+          "then": {
+            "required": ["degrees"],
+            "additionalProperties": false,
+            "properties": { "op": {}, "degrees": { "type": "number" } }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "hover" } } },
+          "then": {
+            "required": ["seconds"],
+            "additionalProperties": false,
+            "properties": { "op": {}, "seconds": { "type": "number", "minimum": 0 } }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "return_to_start" } } },
+          "then": {
+            "additionalProperties": false,
+            "properties": { "op": {}, "speed": { "type": "number", "exclusiveMinimum": 0 } }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "enum": ["goto_target", "goto_top_of"] } } },
+          "then": {
+            "required": ["target"],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "target": { "type": "string", "minLength": 1 },
+              "speed": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "hover_in_front_of" } } },
+          "then": {
+            "required": ["target", "distance", "seconds"],
+            "additionalProperties": false,
+            "properties": {
+              "op": {},
+              "target": { "type": "string", "minLength": 1 },
+              "distance": { "type": "number", "exclusiveMinimum": 0 },
+              "seconds": { "type": "number", "minimum": 0 }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

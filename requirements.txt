@@ -5,3 +5,5 @@ pyzmq
 # Tier 3 only: TCP->WebSocket proxy so the Betaflight web App (Chrome) can reach
 # SITL. See tier3/sitl_ws_proxy.py.
 websockets
+# Mission Control: validate Mission IR against docs/mission-control/mission-ir.schema.json.
+jsonschema
