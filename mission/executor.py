@@ -48,6 +48,8 @@ class MissionExecutor:
         self._leg_timeout_s = leg_timeout_s
         self._log = log or (lambda m: print(m, flush=True))
         self._armed = False
+        self._speed_mps: float | None = None  # last commanded cruise speed
+        self._last_seq = 0  # highest waypoint command_seq observed so far
 
     def run(self, mission: NormalizedMission) -> None:
         """Execute every step. On any failure, land + disarm, then re-raise."""
@@ -72,6 +74,7 @@ class MissionExecutor:
             self._armed = False
         elif s.op == "set_speed":
             self._c.publish_waypoint_speed(s.speed_mps)
+            self._speed_mps = s.speed_mps
         elif s.op == "takeoff":
             self._c.publish_autonomy_request("takeoff")
         elif s.op == "land":
@@ -84,8 +87,13 @@ class MissionExecutor:
             raise ValueError(f"executor cannot handle op '{s.op}'")
 
     def _fly_leg(self, s: NormalizedStep) -> None:
+        # Learn the backend's current command sequence BEFORE issuing the new
+        # waypoint, so we can ignore stale "reached" statuses left over from the
+        # previous leg (each waypoint bumps command_seq on the backend).
+        baseline = self._current_seq()
         if s.speed_mps is not None:
             self._c.publish_waypoint_speed(s.speed_mps)
+            self._speed_mps = s.speed_mps
         self._c.publish_relative_waypoint(
             forward=s.forward_m,
             right=s.right_m,
@@ -94,11 +102,35 @@ class MissionExecutor:
             threshold_m=s.threshold_m,
             hold_time_s=s.hold_time_s,
         )
-        self._wait_reached()
+        self._wait_reached(self._leg_budget_s(s), min_seq=baseline + 1)
 
-    def _wait_reached(self) -> None:
-        deadline = time.monotonic() + self._leg_timeout_s
-        for status in self._c.waypoint_status(timeout_sec=self._leg_timeout_s):
+    def _leg_budget_s(self, s: NormalizedStep) -> float:
+        """Adaptive wait: allow real travel time (distance/speed) + hold + margin,
+        never less than the configured floor."""
+        dist = (s.forward_m ** 2 + s.right_m ** 2 + s.down_m ** 2) ** 0.5
+        speed = self._speed_mps or 0.3  # conservative if no speed was ever set
+        travel = dist / speed if speed > 0 else 0.0
+        return max(self._leg_timeout_s, travel * 3.0 + s.hold_time_s + 15.0)
+
+    def _current_seq(self) -> int:
+        """Peek the stream briefly to capture the backend's current command_seq."""
+        end = time.monotonic() + 0.4
+        for status in self._c.waypoint_status(timeout_sec=0.4):
+            self._last_seq = max(self._last_seq, int(getattr(status, "command_seq", 0)))
+            if time.monotonic() >= end:
+                break
+        return self._last_seq
+
+    def _wait_reached(self, timeout_s: float, *, min_seq: int) -> None:
+        deadline = time.monotonic() + timeout_s
+        for status in self._c.waypoint_status(timeout_sec=timeout_s):
+            seq = int(getattr(status, "command_seq", 0))
+            self._last_seq = max(self._last_seq, seq)
+            # ignore statuses from before this waypoint was accepted (stale)
+            if seq < min_seq:
+                if time.monotonic() > deadline:
+                    break
+                continue
             if getattr(status, "reached", False) and getattr(status, "held", False):
                 dist = getattr(status, "distance_m", float("nan"))
                 self._log(f"[mission]   reached (distance={dist:.2f} m)")
@@ -106,7 +138,7 @@ class MissionExecutor:
             if time.monotonic() > deadline:
                 break
         raise TimeoutError(
-            f"leg did not reach & hold within {self._leg_timeout_s:.0f} s"
+            f"leg did not reach & hold within {timeout_s:.0f} s"
         )
 
     def _safe_teardown(self) -> None:
@@ -125,6 +157,7 @@ class DryRunClient:
     def __init__(self, log: Callable[[str], None] | None = None) -> None:
         self._log = log or (lambda m: print(m, flush=True))
         self.calls: list[tuple[str, dict[str, Any]]] = []
+        self._seq = 0  # models backend command_seq (bumped per waypoint)
 
     def _rec(self, name: str, **kw: Any) -> None:
         self.calls.append((name, kw))
@@ -137,20 +170,25 @@ class DryRunClient:
         self._rec("publish_waypoint_speed", speed_mps=speed_mps)
 
     def publish_autonomy_request(self, request_type: str, **kw: Any) -> None:
+        self._seq += 1
         self._rec("publish_autonomy_request", request_type=request_type, **kw)
 
     def publish_relative_waypoint(self, **kw: Any) -> None:
+        self._seq += 1
         self._rec("publish_relative_waypoint", **kw)
 
     def publish_yaw_turn_command(self, delta_yaw_rad: float) -> None:
+        self._seq += 1
         self._rec("publish_yaw_turn_command", delta_yaw_rad=delta_yaw_rad)
 
     def waypoint_status(self, **kw: Any):
         self._rec("waypoint_status", **kw)
+        seq = self._seq
 
         class _S:
             reached = True
             held = True
             distance_m = 0.0
+            command_seq = seq
 
         yield _S()

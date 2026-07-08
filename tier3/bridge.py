@@ -202,9 +202,16 @@ class Guidance:
         # --- waypoint status bookkeeping + auto-disarm after landing ---
         dist = math.sqrt(ex * ex + ey * ey + (tz - pos[2]) ** 2)
         with self.lock:
-            if mode in ("fly", "land") and dist <= threshold:
-                if self.reached_at is None:
-                    self.reached_at = time.monotonic()
+            if mode in ("fly", "land"):
+                if dist <= threshold:
+                    if self.reached_at is None:
+                        self.reached_at = time.monotonic()
+                elif dist > max(threshold * 4.0, threshold + 1.0):
+                    # departed the target by a gross margin (e.g. altitude
+                    # overshoot): restart the hold timer so "held" means
+                    # genuinely settled. Small settle-jitter within the band
+                    # is tolerated so a hover can accumulate its hold time.
+                    self.reached_at = None
             reached = self.reached_at is not None
             held = reached and (time.monotonic() - self.reached_at) >= hold_time
             if mode == "land" and (-pos[2]) < 0.08:

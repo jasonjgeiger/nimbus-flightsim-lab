@@ -124,9 +124,14 @@ class Drone:
                 self.y += dy * s
                 self.z += dz * s
             # waypoint-status bookkeeping
-            if self.active and dist <= self.threshold_m:
-                if self.reached_at is None:
-                    self.reached_at = time.monotonic()
+            if self.active:
+                if dist <= self.threshold_m:
+                    if self.reached_at is None:
+                        self.reached_at = time.monotonic()
+                elif dist > max(self.threshold_m * 4.0, self.threshold_m + 1.0):
+                    # departed the target by a gross margin (overshoot):
+                    # restart the hold timer. Small settle-jitter is tolerated.
+                    self.reached_at = None
 
     def snapshot(self):
         with self.lock:
