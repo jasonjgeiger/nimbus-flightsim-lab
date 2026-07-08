@@ -686,3 +686,59 @@ with NimbusClient() as client:
 CRSF range: 172–1811   throttle low = 172   roll/pitch/yaw center = 992
 >992 = right / forward / clockwise ;  <992 = left / back / counter-clockwise
 ```
+
+---
+
+## 12. Natural-language mission control (web app)
+
+Type a mission in plain English ("fly forward 20 ft, then go up 100 ft and
+hover"), review the compiled plan, then fly it against whatever "world" is
+listening on the ZMQ endpoints — the Tier 2 mock, the Tier 3 Betaflight SITL
+bridge, or (eventually) a real NimbusOS drone. **The web app *is* the agent;**
+switching sim ↔ real drone is just a matter of which world is running.
+
+Pipeline: **English → Mission IR (strict JSON) → validate (units + safety
+caps) → executor → ZMQ**. The natural-language layer sits *outside* the safety
+boundary — every mission is dead-reckoned against altitude/geofence/speed caps
+*before* a single command is published. See
+[`docs/mission-control/`](docs/mission-control/) for the design and the IR
+schema, and [`webui/README.md`](webui/README.md) for full details.
+
+### 12.1 Run it — step by step
+
+```bash
+source .venv/bin/activate
+
+# 1) Start a world (pick ONE), and wait for it to be ready:
+.venv/bin/python mock_nimbus.py          # Tier 2 kinematic mock (instant), OR
+.venv/bin/python tier3/bridge.py         # Tier 3 Betaflight SITL — wait for "[bridge] READY"
+
+# 2) Start the web app (in another terminal):
+.venv/bin/python -m uvicorn webui.app:app --host 127.0.0.1 --port 8000
+
+# 3) Open http://127.0.0.1:8000 in your browser.
+```
+
+In the browser: type the mission → **Compile** → review/edit the IR and the
+plain-English preview (invalid missions are rejected with a reason) →
+**Confirm & Fly** → watch the live per-leg log stream. The same `arm →
+takeoff → legs → land → disarm` you saw in the Tier 2/3 agents, now driven by
+your sentence.
+
+### 12.2 Run a mission from the CLI (no browser)
+
+The executor is a standalone module — handy for scripting and CI:
+
+```bash
+# validate + preview only (does not fly)
+.venv/bin/python -m mission mission/examples/forward_up_hover.json --dry-run
+
+# fly it against the running world
+.venv/bin/python -m mission mission/examples/forward_up_hover.json --yes
+```
+
+### 12.3 Tests
+
+```bash
+.venv/bin/python -m mission.selftest      # 12 standalone tests (no pytest)
+```
