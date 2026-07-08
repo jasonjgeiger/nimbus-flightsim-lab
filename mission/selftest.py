@@ -12,6 +12,7 @@ import math
 
 from mission.executor import DryRunClient, MissionExecutor
 from mission.ir import FEET_TO_M
+from mission.nl import RuleBasedCompiler
 from mission.validate import MissionValidationError, compile_mission
 
 
@@ -114,6 +115,31 @@ def test_geofence_respects_yaw() -> None:
         }
     )
     assert len(m.steps) == 3
+
+
+def test_nl_rule_example_a() -> None:
+    ir = RuleBasedCompiler().compile("Fly forward 20 ft, then go up 100 ft and hover.")
+    assert ir["units_in"] == "imperial"
+    ops = [s["op"] for s in ir["steps"]]
+    assert ops == ["arm", "takeoff", "goto_relative", "climb", "hover", "land", "disarm"]
+    m = compile_mission(ir)  # must validate + convert cleanly
+    assert abs(m.steps[3].down_m - (-100 * FEET_TO_M)) < 1e-6
+
+
+def test_nl_rule_metric_and_yaw() -> None:
+    ir = RuleBasedCompiler().compile(
+        "take off, fly forward 5 meters, turn left 90 degrees, hover for 5 seconds, land"
+    )
+    assert ir["units_in"] == "si"
+    yaw = next(s for s in ir["steps"] if s["op"] == "yaw_turn")
+    assert yaw["degrees"] == -90.0  # left is negative
+    compile_mission(ir)
+
+
+def test_nl_rule_perception_rejected() -> None:
+    ir = RuleBasedCompiler().compile("fly to the tree and hover")
+    assert any(s["op"] == "goto_target" for s in ir["steps"])
+    _expect_reject(ir, "not supported in v1")
 
 
 def test_full_dry_run() -> None:
