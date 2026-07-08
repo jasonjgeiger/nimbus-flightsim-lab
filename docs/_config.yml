@@ -1,0 +1,37 @@
+title: Nimbus Flight-Sim Lab
+description: >-
+  A hands-on tutorial for prototyping NimbusOS autonomy agents against a flight
+  simulator — understand the SDK, set up your system, close the loop in a sim,
+  then graduate to Nimbus hardware.
+theme: just-the-docs
+
+# Project-pages base URL: https://jasonjgeiger.github.io/nimbus-flightsim-lab
+url: https://jasonjgeiger.github.io
+baseurl: /nimbus-flightsim-lab
+
+color_scheme: dark
+search_enabled: true
+heading_anchors: true
+
+# Only build the tutorial content; skip repo cruft that may sit alongside docs/.
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor
+  - Remote-Headless-Access.docx
+
+aux_links:
+  GitHub repo:
+    - https://github.com/jasonjgeiger/nimbus-flightsim-lab
+  DroneForge Docs:
+    - https://droneforge.gitbook.io/droneforge-docs
+aux_links_new_tab: true
+
+footer_content: >-
+  Community tutorial. NimbusOS, Nimbus, and DroneForge are products of
+  <a href="https://thedroneforge.com/">DroneForge</a>. The SDK evolves fast —
+  always re-check the
+  <a href="https://droneforge.gitbook.io/droneforge-docs">official docs</a>.
+
+plugins:
+  - jekyll-seo-tag
